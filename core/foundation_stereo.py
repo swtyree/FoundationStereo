@@ -22,18 +22,6 @@ from Utils import *
 import time
 
 
-try:
-    autocast = torch.cuda.amp.autocast
-except:
-    class autocast:
-        def __init__(self, enabled):
-            pass
-        def __enter__(self):
-            pass
-        def __exit__(self, *args):
-            pass
-
-
 def normalize_image(img):
     '''
     @img: (B,C,H,W) in range 0-255, RGB order
@@ -182,7 +170,7 @@ class FoundationStereo(nn.Module):
 
     def upsample_disp(self, disp, mask_feat_4, stem_2x):
 
-        with autocast(enabled=self.args.mixed_precision):
+        with torch.amp.autocast("cuda", enabled=self.args.mixed_precision):
             xspx = self.spx_2_gru(mask_feat_4, stem_2x)   # 1/2 resolution
             spx_pred = self.spx_gru(xspx)
             spx_pred = F.softmax(spx_pred, 1)
@@ -197,7 +185,7 @@ class FoundationStereo(nn.Module):
         low_memory = low_memory or (self.args.get('low_memory', False))
         image1 = normalize_image(image1)
         image2 = normalize_image(image2)
-        with autocast(enabled=self.args.mixed_precision):
+        with torch.amp.autocast("cuda", enabled=self.args.mixed_precision):
             out, vit_feat = self.feature(torch.cat([image1, image2], dim=0))
             vit_feat = vit_feat[:B]
             features_left = [o[:B] for o in out]
@@ -236,7 +224,7 @@ class FoundationStereo(nn.Module):
         for itr in range(iters):
             disp = disp.detach()
             geo_feat = geo_fn(disp, coords, low_memory=low_memory)
-            with autocast(enabled=self.args.mixed_precision):
+            with torch.amp.autocast("cuda", enabled=self.args.mixed_precision):
               net_list, mask_feat_4, delta_disp = self.update_block(net_list, inp_list, geo_feat, disp, att)
 
             disp = disp + delta_disp.float()
