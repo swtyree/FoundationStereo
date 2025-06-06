@@ -19,7 +19,7 @@ from core.geometry import Combined_Geo_Encoding_Volume
 from core.submodule import *
 from core.utils.utils import *
 from Utils import *
-import time
+import time,huggingface_hub
 
 
 def normalize_image(img):
@@ -112,7 +112,7 @@ class hourglass(nn.Module):
 
 
 
-class FoundationStereo(nn.Module):
+class FoundationStereo(nn.Module, huggingface_hub.PyTorchModelHubMixin):
     def __init__(self, args):
         super().__init__()
         self.args = args
@@ -121,14 +121,14 @@ class FoundationStereo(nn.Module):
         self.cv_group = 8
         volume_dim = 28
 
-        self.cnet = ContextNetDino(output_dim=[args.hidden_dims, context_dims], downsample=args.n_downsample)
+        self.cnet = ContextNetDino(args, output_dim=[args.hidden_dims, context_dims], downsample=args.n_downsample)
         self.update_block = BasicSelectiveMultiUpdateBlock(self.args, self.args.hidden_dims[0], volume_dim=volume_dim)
         self.sam = SpatialAttentionExtractor()
         self.cam = ChannelAttentionEnhancement(self.args.hidden_dims[0])
 
         self.context_zqr_convs = nn.ModuleList([nn.Conv2d(context_dims[i], args.hidden_dims[i]*3, kernel_size=3, padding=3//2) for i in range(self.args.n_gru_layers)])
 
-        self.feature = Feature()
+        self.feature = Feature(args)
         self.proj_cmb = nn.Conv2d(self.feature.d_out[0], 12, kernel_size=1, padding=0)
 
         self.stem_2 = nn.Sequential(

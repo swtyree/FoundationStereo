@@ -3,3 +3,4 @@ output/*
 *.pyc
 weight/
 __pycache__
+DATA/*

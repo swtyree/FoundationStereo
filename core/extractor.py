@@ -190,8 +190,9 @@ class MultiBasicEncoder(nn.Module):
 
 
 class ContextNetDino(MultiBasicEncoder):
-    def __init__(self, output_dim=[128], norm_fn='batch', downsample=3):
+    def __init__(self, args, output_dim=[128], norm_fn='batch', downsample=3):
         nn.Module.__init__(self)
+        self.args = args
         self.patch_size = 14
         self.image_size = 518
         self.vit_feat_dim = 384
@@ -229,7 +230,8 @@ class ContextNetDino(MultiBasicEncoder):
           nn.Conv2d(128, 128, kernel_size=4, stride=4, padding=0),
           nn.BatchNorm2d(128),
         )
-        self.conv2 = BasicConv(128+128, 128, kernel_size=3, padding=1)
+        vit_dim = DepthAnythingFeature.model_configs[self.args.vit_size]['features']//2
+        self.conv2 = BasicConv(128+vit_dim, 128, kernel_size=3, padding=1)
         self.norm = nn.BatchNorm2d(256)
 
         output_list = []
@@ -282,16 +284,17 @@ class ContextNetDino(MultiBasicEncoder):
 
 
 class DepthAnythingFeature(nn.Module):
+    model_configs = {
+        'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024]},
+        'vitb': {'encoder': 'vitb', 'features': 128, 'out_channels': [96, 192, 384, 768]},
+        'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]}
+    }
+
     def __init__(self, encoder='vits'):
         super().__init__()
-        model_configs = {
-            'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024]},
-            'vitb': {'encoder': 'vitb', 'features': 128, 'out_channels': [96, 192, 384, 768]},
-            'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]}
-        }
         from depth_anything.dpt import DepthAnything
         self.encoder = encoder
-        depth_anything = DepthAnything(model_configs[encoder])
+        depth_anything = DepthAnything(self.model_configs[encoder])
         self.depth_anything = depth_anything
 
         self.intermediate_layer_idx = {   #!NOTE For V2
@@ -318,27 +321,29 @@ class DepthAnythingFeature(nn.Module):
 
 
 class Feature(nn.Module):
-    def __init__(self):
+    def __init__(self, args):
         super(Feature, self).__init__()
+        self.args = args
         model = timm.create_model('edgenext_small', pretrained=True, features_only=False)
         self.stem = model.stem
         self.stages = model.stages
         chans = [48, 96, 160, 304]
         self.chans = chans
+        self.dino = DepthAnythingFeature(encoder=self.args.vit_size)
+        self.dino = freeze_model(self.dino)
+        vit_feat_dim = DepthAnythingFeature.model_configs[self.args.vit_size]['features']//2
 
         self.deconv32_16 = Conv2x_IN(chans[3], chans[2], deconv=True, concat=True)
         self.deconv16_8 = Conv2x_IN(chans[2]*2, chans[1], deconv=True, concat=True)
         self.deconv8_4 = Conv2x_IN(chans[1]*2, chans[0], deconv=True, concat=True)
         self.conv4 = nn.Sequential(
-          BasicConv(chans[0]*2+128, chans[0]*2+128, kernel_size=3, stride=1, padding=1, norm='instance'),
-          ResidualBlock(chans[0]*2+128, chans[0]*2+128, norm_fn='instance'),
-          ResidualBlock(chans[0]*2+128, chans[0]*2+128, norm_fn='instance'),
+          BasicConv(chans[0]*2+vit_feat_dim, chans[0]*2+vit_feat_dim, kernel_size=3, stride=1, padding=1, norm='instance'),
+          ResidualBlock(chans[0]*2+vit_feat_dim, chans[0]*2+vit_feat_dim, norm_fn='instance'),
+          ResidualBlock(chans[0]*2+vit_feat_dim, chans[0]*2+vit_feat_dim, norm_fn='instance'),
         )
 
-        self.dino = DepthAnythingFeature(encoder='vitl')
-        self.dino = freeze_model(self.dino)
         self.patch_size = 14
-        self.d_out = [chans[0]*2+128, chans[1]*2, chans[2]*2, chans[3]]
+        self.d_out = [chans[0]*2+vit_feat_dim, chans[1]*2, chans[2]*2, chans[3]]
 
     def forward(self, x):
         B,C,H,W = x.shape

@@ -41,15 +41,16 @@ if __name__=="__main__":
   os.makedirs(args.out_dir, exist_ok=True)
 
   ckpt_dir = args.ckpt_dir
-  cfg = {}
+  cfg = OmegaConf.load(f'{os.path.dirname(ckpt_dir)}/cfg.yaml')
+  if 'vit_size' not in cfg:
+    cfg['vit_size'] = 'vitl'
   for k in args.__dict__:
     cfg[k] = args.__dict__[k]
   args = OmegaConf.create(cfg)
   logging.info(f"args:\n{args}")
   logging.info(f"Using pretrained model from {ckpt_dir}")
 
-  cfg = OmegaConf.load(f'{os.path.dirname(ckpt_dir)}/cfg.yaml')
-  model = FoundationStereo(cfg)
+  model = FoundationStereo(args)
 
   ckpt = torch.load(ckpt_dir, weights_only=False)
   logging.info(f"ckpt global_step:{ckpt['global_step']}, epoch:{ckpt['epoch']}")
@@ -109,7 +110,7 @@ if __name__=="__main__":
     logging.info(f"PCL saved to {args.out_dir}")
 
     if args.denoise_cloud:
-      logging.info("denoise point cloud...")
+      logging.info("[Optional step] denoise point cloud...")
       cl, ind = pcd.remove_radius_outlier(nb_points=args.denoise_nb_points, radius=args.denoise_radius)
       inlier_cloud = pcd.select_by_index(ind)
       o3d.io.write_point_cloud(f'{args.out_dir}/cloud_denoise.ply', inlier_cloud)
