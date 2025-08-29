@@ -1,6 +1,6 @@
 # FoundationStereo: Zero-Shot Stereo Matching
 
-This is the official implementation of our paper accepted by CVPR 2025 Oral (**All strong accept**)
+This is the official implementation of our paper accepted by CVPR 2025 Oral (**Best Paper Nomination**)
 
 [[Website]](https://nvlabs.github.io/FoundationStereo/) [[Paper]](https://arxiv.org/abs/2501.09898) [[Video]](https://www.youtube.com/watch?v=R7RgHxEXB3o)
 
@@ -19,6 +19,13 @@ Tremendous progress has been made in deep stereo matching to excel on benchmark 
 <p align="center">
   <img src="./teaser/input_output.gif" width="600"/>
 </p>
+
+# Changelog
+| Date       | Description                                                                                                         |
+|------------|---------------------------------------------------------------------------------------------------------------------|
+| 2025/08/05 | Our commercial model is available now at [here](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/foundationstereo)! |
+| 2025/07/03 | Improve ONNX and TRT support. Add support for Jetson                                                                |
+
 
 # Leaderboards 🏆
 We obtained the 1st place on the world-wide [Middlebury leaderboard](https://vision.middlebury.edu/stereo/eval3/) and [ETH3D leaderboard](https://www.eth3d.net/low_res_two_view).
@@ -51,13 +58,14 @@ Note that `flash-attn` needs to be installed separately to avoid [errors during 
 
 
 # Model Weights
-- Download the foundation model for zero-shot inference on your data from [here](https://drive.google.com/drive/folders/1VhPebc_mMxWKccrv7pdQLTvXYVcLYpsf?usp=sharing). Put the entire folder (e.g. `23-51-11`) under `./pretrained_models/`.
+- Download the foundation model for zero-shot inference on your data. Put the entire folder (e.g. `23-51-11`) under `./pretrained_models/`.
 
 
-| Model | Description |
-| ----- | ----------- |
-| 23-51-11 | Our best performing model for general use, based on Vit-large |
-| 11-33-40 | Slightly lower accuracy but faster inference, based on Vit-small |
+| Model     | Description                                                                 |
+|-----------|-----------------------------------------------------------------------------|
+| [NVIDIA-TAO](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/foundationstereo)       | For commercial usage (slightly different from the original)                 |
+| [23-51-11](https://drive.google.com/drive/folders/1VhPebc_mMxWKccrv7pdQLTvXYVcLYpsf?usp=sharing)  | Our best performing model for general use, based on Vit-large               |
+| [11-33-40](https://drive.google.com/drive/folders/1VhPebc_mMxWKccrv7pdQLTvXYVcLYpsf?usp=sharing)  | Slightly lower accuracy but faster inference, based on Vit-small            |
 
 
 # Run demo
@@ -82,24 +90,51 @@ Tips:
 
 
 
-# ONNX/TensorRT Inference (Experimental)
-To create ONNX models:
-- Make [this change](https://github.com/NVlabs/FoundationStereo/issues/13#issuecomment-2708791825) to replace flash-attention
+# ONNX/TensorRT(TRT) Inference
+
+We only support docker setup for ONNX/TRT version.
+
+- Build docker (tested on NVIDIA Driver Version: 560.35.03, CUDA Version: 12.6)
+```bash
+export DIR=$(pwd)
+cd docker && docker build --network host -t foundation_stereo .
+bash run_container.sh
+cd /
+git clone https://github.com/onnx/onnx-tensorrt.git
+cd onnx-tensorrt
+python3 setup.py install
+apt-get install -y libnvinfer-dispatch10 libnvinfer-bin tensorrt
+cd $DIR
+```
+
 
 - Make ONNX:
 ```
-export XFORMERS_DISABLED=1
-python scripts/make_onnx.py --save_path ./output/foundation_stereo.onnx --ckpt_dir ./pretrained_models/23-51-11/model_best_bp2.pth --height 480 --width 640 --valid_iters 22
+XFORMERS_DISABLED=1 python scripts/make_onnx.py --save_path ./pretrained_models/foundation_stereo.onnx --ckpt_dir ./pretrained_models/23-51-11/model_best_bp2.pth --height 448 --width 672 --valid_iters 20
 ```
-- Convert ONNX to TensorRT:
+
+- Convert to TRT:
 ```
-trtexec --onnx=./output/foundation_stereo.onnx --saveEngine=./output/foundation_stereo.engine --fp16 --verbose
+trtexec --onnx=pretrained_models/foundation_stereo.onnx --verbose --saveEngine=pretrained_models/foundation_stereo.plan --fp16
+```
+
+- Run TRT:
+```
+python scripts/run_demo_tensorrt.py \
+        --left_img ${PWD}/assets/left.png \
+        --right_img ${PWD}/assets/right.png \
+        --save_path ${PWD}/output \
+        --pretrained pretrained_models/foundation_stereo.plan \
+        --height 448 \
+        --width 672 \
+        --pc \
+        --z_far 100.0
 ```
 
 We have observed 6X speed on the same GPU 3090 with TensorRT FP16. Although how much it speeds up depends on various factors, we recommend trying it out if you care about faster inference. Also remember to adjust the args setting based on your need.
 
-This feature is experimental as of now and contributions are welcome!
-
+# Running on Jetson
+Please refer to [readme_jetson.md](readme_jetson.md).
 
 # FSD Dataset
 <p align="center">
@@ -120,7 +155,7 @@ It will produce:
   <img src="./teaser/fsd_sample.png" width="800"/>
 </p>
 
-
+For dataset license, please check [this](https://github.com/NVlabs/FoundationStereo/blob/master/LICENSE).
 
 
 # FAQ
@@ -142,6 +177,9 @@ It will produce:
 - Q: I have two or multiple RGB cameras, can I run this? <br>
   A: You can first rectify a pair of images using this [OpenCV function](https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html#ga617b1685d4059c6040827800e72ad2b6) into stereo image pair (now they don't have relative rotations), then feed into FoundationStereo.
 
+- Q: Can I use it for commercial purpose? <br>
+  A: We released a commercial version [here](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/tao/models/foundationstereo).
+
 
 # BibTeX
 ```
@@ -158,4 +196,4 @@ We would like to thank Gordon Grigor, Jack Zhang, Karsten Patzwaldt, Hammad Mazh
 
 
 # Contact
-For questions, please reach out to [Bowen Wen](https://wenbowen123.github.io/) (bowenw@nvidia.com).
+For commercial inquiries, additional technical support, and other questions, please reach out to [Bowen Wen](https://wenbowen123.github.io/) (bowenw@nvidia.com).

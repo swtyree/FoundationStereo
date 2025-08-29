@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 code_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(f'{code_dir}/../')
-from dinov2.models.vision_transformer import vit_small,vit_base,vit_large
 from depth_anything.blocks import FeatureFusionBlock, _make_scratch
 
 
